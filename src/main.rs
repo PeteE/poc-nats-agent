@@ -1,45 +1,74 @@
-use anyhow::Result;
-use futures::StreamExt;
 use tracing::{info, Level};
-use tracing_subscriber;
+use async_nats::jetstream::context::Context;
+use config::Config;
 
 mod nats_client;
+mod config;
+mod processor;
+mod event;
+mod telemetry;
+
+// configs needed:
+// - NATS_URL
+// - NATS_SUBJECTS
+// - NATS_STREAM_NAME
+// - NATS_CONSUMER_NAME
 
 #[tokio::main]
-async fn main() -> Result<()> {
-    // Initialize tracing
+async fn main() -> anyhow::Result<()> {
+    // Initialize basic console logging
     tracing_subscriber::fmt()
         .with_max_level(Level::INFO)
         .init();
 
+    let config = Config::from_env()?;
+
     info!("Starting NATS Agent POC");
 
-    // Connect to NATS
-    let nats_url = std::env::var("NATS_URL").unwrap_or_else(|_| "nats://localhost:4222".to_string());
-    info!("Connecting to NATS at {}", nats_url);
+    // Initialize OpenTelemetry metrics if endpoint is configured
+    let meter_provider = if let Some(ref endpoint) = config.otel_endpoint {
+        let provider = telemetry::init_metrics(&config.otel_service_name, endpoint)?;
+        info!("OpenTelemetry metrics initialized, exporting to {}", endpoint);
+        Some(provider)
+    } else {
+        tracing::warn!("OpenTelemetry metrics disabled: OTEL_EXPORTER_OTLP_ENDPOINT not set");
+        None
+    };
 
-    let client = nats_client::connect(&nats_url).await?;
+    let client = nats_client::connect(&config.nats_url).await?;
     info!("Connected to NATS successfully");
 
-    // Subscribe to a test subject
-    let subject = "test.messages";
-    info!("Subscribing to subject: {}", subject);
+    // setup stream
+    let js: Context = async_nats::jetstream::new(client);
 
-    let mut subscriber = client.subscribe(subject).await?;
-    info!("Subscribed successfully, waiting for messages...");
+    // create a stream
+    let stream = nats_client::ensure_stream(js,
+        &config.nats_stream_name,
+        config.nats_subjects.clone())
+        .await?;
 
-    // Process messages
-    while let Some(message) = subscriber.next().await {
-        info!(
-            "Received message on {}: {:?}",
-            message.subject,
-            String::from_utf8_lossy(&message.payload)
-        );
+    // create a consumer
+    let consumer = nats_client::ensure_consumer(stream,
+        &config.nats_consumer_name)
+        .await?;
 
-        // TODO: Process message with agent logic
-        // TODO: Call LLM if needed
-        // TODO: Publish results
-    }
+    // Spawn the message processor as a background task
+    info!("Starting message processor");
+    let processor_handle = tokio::spawn(
+        async move {
+            if let Err(e) = processor::process_messages(consumer, config).await {
+                tracing::error!("Message processor error: {}", e);
+            }
+        }
+    );
+
+    // Wait for the processor to finish (or run forever)
+    processor_handle.await?;
+
+    // Shutdown metrics gracefully
+    info!("Shutting down metrics");
+    telemetry::shutdown_metrics(meter_provider)?;
 
     Ok(())
 }
+

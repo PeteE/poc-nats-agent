@@ -2,6 +2,21 @@
 
 Learning project for Rust, NATS.io messaging, and AI agents.
 
+# NOTES
+Creating a stream
+```
+nats stream add workflows --subjects 'workflows.*' --description 'Stream containg all workflow information' --storage file --ack --retention limits --discard old 
+```
+Creating a durable consumer for workflow created messages
+```
+nats consumer create workflows wf-created --filter=workflows.created --description='Workflow Created Events' --ack=explicit --pull --deliver=all --max-deliver=-1 --sample=-1 --replay=instant  --no-headers-only 
+```
+Creating a durable consumer for workflow created messages
+```
+nats consumer create workflows wf-created --filter=workflows.created --description='Workflow Created Events' --ack=explicit --pull --deliver=all --max-deliver=-1 --sample=-1 --replay=instant  --no-headers-only 
+`
+
+
 ## What This Is
 
 Rust-based AI agents that consume messages from NATS queues, process them (with LLM calls), and produce results.

@@ -29,27 +29,22 @@ helm_remote('opentelemetry-operator',
 
 # # Deploy OpenTelemetry Collector
 k8s_yaml('k8s/otel-collector.yaml')
-# k8s_resource(
-#     'otel-collector',
-#     port_forwards=['4317:4317', '4318:4318'],  # OTLP gRPC and HTTP
-#     labels=['observability'],
-#     resource_deps=['opentelemetry-operator']
-# )
 
-# # Deploy NATS
-# helm_remote('nats',
-#     repo_url='https://nats-io.github.io/k8s/helm/charts/',
-#     namespace='default',
-#     set=[
-#         'nats.jetstream.enabled=true',
-#     ]
-# )
+# Deploy NATS
+helm_remote('nats',
+    repo_url='https://nats-io.github.io/k8s/helm/charts/',
+    namespace='nats-io',
+    create_namespace=True,
+    set=[
+        'config.jetstream.enabled=true',
+    ]
+)
 
-# k8s_resource(
-#     'nats',
-#     port_forwards='4222:4222',  # NATS client port
-#     labels=['infrastructure']
-# )
+k8s_resource(
+    'nats',
+    port_forwards='4222:4222',  # NATS client port
+    labels=['infrastructure']
+)
 
 # Future: Add Rust agent container build/deploy here
 # docker_build('nats-agent', '.')
