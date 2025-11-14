@@ -28,11 +28,9 @@ spec:
     exporters:
       # Debug exporter - logs to stdout
       debug:
-        verbosity: detailed
-
-      # Prometheus exporter for metrics
-      # prometheus:
-      #   endpoint: 0.0.0.0:8889
+        verbosity: basic
+      otlphttp:
+        endpoint: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/api/v1/otlp
 
       # Future: Add exporters for external services
       # - Jaeger for traces
@@ -49,8 +47,9 @@ spec:
         metrics:
           receivers: [otlp]
           processors: [memory_limiter, batch]
-          exporters: [debug]
-
+          exporters: 
+            - debug
+            - otlphttp
         logs:
           receivers: [otlp]
           processors: [memory_limiter, batch]

@@ -22,6 +22,10 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 anyhow = "1.0"
 once_cell = "1.19"
+axum = "0.7"
+sysinfo = "0.32"
+tower-http = { version = "0.6", features = ["trace"] }
+humantime = "2.1"
 
 # Tracing and OpenTelemetry
 tracing = "0.1"

@@ -36,9 +36,14 @@
 
           # Container only for the agent
           nats-agent-container = pkgs.dockerTools.streamLayeredImage {
-            name = "ghcr.io/petee/poc-nats-agent";
+            name = "poc-nats-agent";
+            tag = "latest";
             contents = [
               pkgs.busybox
+              pkgs.cacert
+              pkgs.busybox
+              pkgs.bashInteractive
+              pkgs.jq
             ] ++ debugPkgs;
             config = {
               EntryPoint = [ "${packages.nats-agent}/bin/nats-agent" ];
@@ -53,21 +58,39 @@
           packages = with pkgs; [
             natscli
             nkeys
+            kubernetes-helm
+            kubectl
+            k9s
+            skopeo
 
-            # tilt stuff
+            # dev tooling
             tilt
+            minikube
+
+            # secrets
+            sops
+            azure-cli
 
             python313
             rust-bin.beta.latest.default
             # uv
           ] ++ debugPkgs;
           shellHook = ''
-            export NATS_URL=10.105.115.71:4222
+            export NATS_URL=127.0.0.1:4222
             export NATS_STREAM_NAME=events
-            export NATS_SUBJECTS="events.*"
+            export NATS_SUBJECTS="events.>"
             export NATS_CONSUMER_NAME=all-events
             export OTEL_SERVICE_NAME=nats-agent
-            export OTEL_EXPORTER_OTLP_ENDPOINT=10.97.25.182:4317
+            export OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4317
+            export PROJECT_DIR="$(git rev-parse --show-toplevel)"
+
+            # We use this key to encrypt any sensitive data (eg: helm values.yaml files)
+            export SOPS_AZURE_KEYVAULT_URLS=https://kv-corp-sd8j.vault.azure.net/keys/sops-kv-corp-sd8j/cce212d968b94aeaa5b5752acfd6885a
+
+            echo
+            echo "Decrypting secrets using keyvault: $SOPS_AZURE_KEYVAULT_URLS"
+            eval "$(sops decrypt $PROJECT_DIR/secrets.yaml --extract '["env"]')"
+            echo "Decryption done. Environment variables are set."
           '';
         };
       });

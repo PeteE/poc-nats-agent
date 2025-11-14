@@ -7,6 +7,8 @@ mod config;
 mod processor;
 mod event;
 mod telemetry;
+mod http_server;
+mod message_handler;
 
 // configs needed:
 // - NATS_URL
@@ -52,18 +54,44 @@ async fn main() -> anyhow::Result<()> {
         &config.nats_consumer_name)
         .await?;
 
+    // Create shared HTTP server state
+    let http_state = http_server::AppState::new();
+
+    // Spawn the HTTP server as a background task
+    let http_port = config.http_port;
+    let http_handle = tokio::spawn({
+        let state = http_state.clone();
+        async move {
+            if let Err(e) = http_server::run_server(http_port, state).await {
+                tracing::error!("HTTP server error: {}", e);
+            }
+        }
+    });
+
     // Spawn the message processor as a background task
     info!("Starting message processor");
-    let processor_handle = tokio::spawn(
+    let processor_handle = tokio::spawn({
+        let state = http_state.clone();
         async move {
-            if let Err(e) = processor::process_messages(consumer, config).await {
+            if let Err(e) = processor::process_messages(consumer, config, state).await {
                 tracing::error!("Message processor error: {}", e);
             }
         }
-    );
+    });
 
-    // Wait for the processor to finish (or run forever)
-    processor_handle.await?;
+    // Wait for either task to finish (or run forever)
+    tokio::select! {
+        res = processor_handle => {
+            if let Err(e) = res {
+                tracing::error!("Processor task panicked: {}", e);
+            }
+        }
+        res = http_handle => {
+            if let Err(e) = res {
+                tracing::error!("HTTP server task panicked: {}", e);
+            }
+        }
+    }
 
     // Shutdown metrics gracefully
     info!("Shutting down metrics");

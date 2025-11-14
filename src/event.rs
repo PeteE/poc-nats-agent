@@ -1,19 +1,5 @@
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Event {
-    pub id: String,
-    pub event_type: String,
-    pub payload: Value,
-}
-
-impl Event {
-    pub fn new(id: String, event_type: String, payload: Value) -> Self {
-        Event {
-            id,
-            event_type,
-            payload,
-        }
-    }
-}
+/// Event is simply a type alias for serde_json::Value
+/// This allows the agent to accept any JSON payload without requiring specific structure
+pub type Event = Value;

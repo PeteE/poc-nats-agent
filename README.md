@@ -2,6 +2,18 @@
 
 Learning project for Rust, NATS.io messaging, and AI agents.
 
+# commands
+```
+# start agent with echo program
+NATS_URL=nats://192.168.128.13:4222 \
+    NATS_SUBJECTS="workflows.>" \
+    NATS_STREAM_NAME=events \
+    BATCH_SIZE=1 \
+    OTEL_EXPORTER_OTLP_ENDPOINT=http://10.97.25.182:4317 \
+    MESSAGE_HANDLER_CMD=/home/petee/dev/poc-nats-agent/k8s/nats-agent/files/echo.sh \
+    cargo run --bin nats-agent
+```
+
 # NOTES
 Creating a stream
 ```

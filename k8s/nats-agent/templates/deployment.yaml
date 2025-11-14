@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nats-agent.fullname" . }}
+  labels:
+    {{- include "nats-agent.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "nats-agent.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "nats-agent.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "nats-agent.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+      - name: {{ .Chart.Name }}
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+        image: {{ include "nats-agent.image" . }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.http.port }}
+          protocol: TCP
+        env:
+        - name: NATS_URL
+          value: {{ .Values.nats.url | quote }}
+        - name: NATS_STREAM_NAME
+          value: {{ .Values.nats.streamName | quote }}
+        - name: NATS_SUBJECTS
+          value: {{ .Values.nats.subjects | quote }}
+        - name: NATS_CONSUMER_NAME
+          value: {{ .Values.nats.consumerName | quote }}
+        - name: BATCH_SIZE
+          value: {{ .Values.nats.batchSize | quote }}
+        - name: HTTP_PORT
+          value: {{ .Values.http.port | quote }}
+        - name: MESSAGE_HANDLER_CMD
+          value: {{ .Values.messageHandler.command | quote }}
+        {{- if .Values.opentelemetry.enabled }}
+        - name: OTEL_SERVICE_NAME
+          value: {{ .Values.opentelemetry.serviceName | quote }}
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: {{ .Values.opentelemetry.endpoint | quote }}
+        {{- end }}
+        {{- with .Values.extraEnv }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        livenessProbe:
+          {{- toYaml .Values.livenessProbe | nindent 12 }}
+        readinessProbe:
+          {{- toYaml .Values.readinessProbe | nindent 12 }}
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+        volumeMounts:
+        {{- if .Values.handlerScript.enabled }}
+        - name: handler-script
+          mountPath: /app
+          readOnly: true
+        {{- end }}
+        - name: tmp
+          mountPath: /tmp
+        {{- with .Values.extraVolumeMounts }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      volumes:
+      {{- if .Values.handlerScript.enabled }}
+      - name: handler-script
+        configMap:
+          name: {{ include "nats-agent.fullname" . }}-handler
+          defaultMode: 0755
+      {{- end }}
+      - name: tmp
+        emptyDir: {}
+      {{- with .Values.extraVolumes }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

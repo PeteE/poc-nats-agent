@@ -1,0 +1,107 @@
+replicaCount: 1
+
+image:
+  repository: reg.wheat-dn42.net/poc-nats-agent
+  pullPolicy: Always
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+
+service:
+  type: ClusterIP
+  port: 8080
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 30
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# NATS configuration
+nats:
+  url: "nats://nats:4222"
+  streamName: "events"
+  subjects: "events.>"
+  consumerName: "nats-agent"
+  batchSize: 10
+
+# HTTP server configuration
+http:
+  port: 8080
+
+# Message handler configuration
+messageHandler:
+  # Command to execute for each message
+  # This should be the full path to your handler script/binary
+  command: "/app/handler.sh"
+
+# OpenTelemetry configuration (optional)
+opentelemetry:
+  enabled: false
+  serviceName: "nats-agent"
+  endpoint: ""
+
+# ConfigMap for handler script
+handlerScript:
+  enabled: true
+  # Name of the script file in files/ directory to use
+  # Available options: echo.sh, or add your own custom scripts
+  filename: "echo.sh"
+
+# Additional environment variables
+extraEnv: []
+# - name: CUSTOM_VAR
+#   value: "custom-value"
+
+# Additional volumes
+extraVolumes: []
+# - name: custom-volume
+#   emptyDir: {}
+
+# Additional volume mounts
+extraVolumeMounts: []
+# - name: custom-volume
+#   mountPath: /custom

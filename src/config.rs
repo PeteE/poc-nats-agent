@@ -10,6 +10,7 @@ pub struct Config {
     pub batch_size: usize,
     pub otel_service_name: String,
     pub otel_endpoint: Option<String>,
+    pub http_port: u16,
 }
 
 // env vars needed:
@@ -20,6 +21,8 @@ pub struct Config {
 // - BATCH_SIZE
 // - OTEL_SERVICE_NAME
 // - OTEL_EXPORTER_OTLP_ENDPOINT
+// - HTTP_PORT
+// - MESSAGE_HANDLER_CMD (path to external handler program)
 //
 
 impl Config {
@@ -49,6 +52,11 @@ impl Config {
                 .unwrap_or_else(|_| "nats-agent".to_string()),
 
             otel_endpoint: env::var("OTEL_EXPORTER_OTLP_ENDPOINT").ok(),
+
+            http_port: env::var("HTTP_PORT")
+                .unwrap_or_else(|_| "8080".to_string())
+                .parse()
+                .context("HTTP_PORT must be a valid port number")?,
         })
     }
 }

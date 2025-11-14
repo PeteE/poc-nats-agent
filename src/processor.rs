@@ -1,15 +1,17 @@
 use async_nats::jetstream::consumer::PullConsumer;
 use anyhow::{Result, Context as AnyhowContext};
 use futures::StreamExt;
-use tracing::{info, error, warn};
+use tracing::{info, error};
 use crate::event::Event;
 use crate::config::Config;
+use crate::http_server::AppState;
+use crate::message_handler;
 
 // OpenTelemetry imports for metrics
 use opentelemetry::{
     global,
     KeyValue,
-    metrics::{Counter, Histogram, Meter},
+    metrics::{Histogram, Meter},
 };
 use std::time::Instant;
 use once_cell::sync::Lazy;
@@ -22,34 +24,22 @@ static SERVICE_NAME: Lazy<String> = Lazy::new(|| {
 
 // Struct to hold all our metrics
 struct ProcessorMetrics {
-    messages_processed: Counter<u64>,
-    messages_failed: Counter<u64>,
     processing_latency: Histogram<f64>,
 }
 
 impl ProcessorMetrics {
     fn new(meter: &Meter) -> Self {
         ProcessorMetrics {
-            messages_processed: meter
-                .u64_counter("messages.processed")
-                .with_description("Total number of messages successfully processed")
-                .build(),
-
-            messages_failed: meter
-                .u64_counter("messages.failed")
-                .with_description("Total number of messages that failed processing")
-                .build(),
-
             processing_latency: meter
-                .f64_histogram("message.processing.duration")
-                .with_description("Message processing latency in seconds")
+                .f64_histogram("events.processed.duration")
+                .with_description("Message processing latency in seconds (labeled by status: success/failed)")
                 .with_unit("s")
                 .build(),
         }
     }
 }
 
-pub async fn process_messages(consumer: PullConsumer, config: Config) -> Result<()> {
+pub async fn process_messages(consumer: PullConsumer, config: Config, http_state: AppState) -> Result<()> {
     info!("Starting message processor");
 
     // Initialize OpenTelemetry metrics
@@ -80,36 +70,66 @@ pub async fn process_messages(consumer: PullConsumer, config: Config) -> Result<
                     // Start timing for latency measurement
                     let start = Instant::now();
 
-                    // Deserialize the message payload into an Event
+                    // Deserialize the message payload into an Event (generic JSON)
                     match serde_json::from_slice::<Event>(&msg.payload) {
                         Ok(event) => {
+                            // Extract id and event_type if they exist, otherwise use defaults
+                            let event_id = event.get("id")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("unknown");
+                            let event_type = event.get("event_type")
+                                .or_else(|| event.get("type"))
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("unknown");
+
                             info!(
                                 "Received event - ID: {}, Type: {}, Subject: {}",
-                                event.id, event.event_type, msg.subject
+                                event_id, event_type, msg.subject
                             );
-                            info!("Event details: {:?}", event);
 
-                            // TODO: Process the event based on event_type
-                            // For now, just print and acknowledge
+                            // Handle the message using the message handler
+                            let handle_result = message_handler::handle_message(&event).await;
 
+                            // Check if message handling was successful
+                            if let Err(e) = handle_result {
+                                error!("Failed to handle message: {}", e);
+                                let duration = start.elapsed().as_secs_f64();
+                                metrics.processing_latency.record(duration, &[
+                                    KeyValue::new("event_type", event_type.to_string()),
+                                    KeyValue::new("status", "failed"),
+                                    KeyValue::new("error", "handler_failed"),
+                                ]);
+                                // Increment HTTP state error counter
+                                http_state.increment_errors().await;
+                                // Still acknowledge to avoid reprocessing
+                                if let Err(ack_err) = msg.ack().await {
+                                    error!("Failed to acknowledge message after handler error: {}", ack_err);
+                                }
+                                continue;
+                            }
+
+                            // Acknowledge the message after successful handling
                             if let Err(e) = msg.ack().await {
                                 error!("Failed to acknowledge message: {}", e);
-                                // Increment failure counter
-                                metrics.messages_failed.add(1, &[
-                                    KeyValue::new("event_type", event.event_type.clone()),
+                                let duration = start.elapsed().as_secs_f64();
+                                metrics.processing_latency.record(duration, &[
+                                    KeyValue::new("event_type", event_type.to_string()),
+                                    KeyValue::new("status", "failed"),
                                     KeyValue::new("error", "ack_failed"),
                                 ]);
+                                // Increment HTTP state error counter
+                                http_state.increment_errors().await;
                             } else {
                                 info!("Event processed and acknowledged");
 
                                 // Record successful processing
                                 let duration = start.elapsed().as_secs_f64();
                                 metrics.processing_latency.record(duration, &[
-                                    KeyValue::new("event_type", event.event_type.clone()),
+                                    KeyValue::new("event_type", event_type.to_string()),
+                                    KeyValue::new("status", "success"),
                                 ]);
-                                metrics.messages_processed.add(1, &[
-                                    KeyValue::new("event_type", event.event_type),
-                                ]);
+                                // Increment HTTP state message counter (for /status endpoint)
+                                http_state.increment_messages().await;
                             }
                         }
                         Err(e) => {
@@ -120,11 +140,15 @@ pub async fn process_messages(consumer: PullConsumer, config: Config) -> Result<
                                 String::from_utf8_lossy(&msg.payload)
                             );
 
-                            // Increment failure counter for deserialization errors
-                            metrics.messages_failed.add(1, &[
+                            // Record failure for deserialization errors
+                            let duration = start.elapsed().as_secs_f64();
+                            metrics.processing_latency.record(duration, &[
                                 KeyValue::new("subject", msg.subject.to_string()),
+                                KeyValue::new("status", "failed"),
                                 KeyValue::new("error", "deserialization_failed"),
                             ]);
+                            // Increment HTTP state error counter
+                            http_state.increment_errors().await;
 
                             // Still acknowledge to avoid reprocessing bad messages
                             if let Err(ack_err) = msg.ack().await {
@@ -135,10 +159,13 @@ pub async fn process_messages(consumer: PullConsumer, config: Config) -> Result<
                 }
                 Err(e) => {
                     error!("Error receiving message: {}", e);
-                    // Increment failure counter for message receive errors
-                    metrics.messages_failed.add(1, &[
+                    // Record failure for message receive errors (duration = 0 since we never started processing)
+                    metrics.processing_latency.record(0.0, &[
+                        KeyValue::new("status", "failed"),
                         KeyValue::new("error", "receive_failed"),
                     ]);
+                    // Increment HTTP state error counter
+                    http_state.increment_errors().await;
                 }
             }
         }
