@@ -9,8 +9,10 @@ default_registry(
 )
 
 # Load Helm extensions
+load('ext://namespace', 'namespace_create', 'namespace_inject')
 load('ext://helm_remote', 'helm_remote')
 load('ext://helm_resource', 'helm_resource', 'helm_repo')
+load('ext://secret', 'secret_from_dict')
 
 # Deploy cert-manager
 helm_remote('cert-manager',
@@ -24,7 +26,6 @@ helm_remote('cert-manager',
     # labels=['infrastructure'],
 )
 
-load('ext://secret', 'secret_from_dict')
 k8s_yaml(
     secret_from_dict(
         name='cloudflare-api-token',
@@ -69,6 +70,7 @@ k8s_yaml('k8s/manifests/ingress-wildcard-cert.yaml')
 
 # Deploy Ingress conroller
 k8s_yaml('k8s/manifests/gateway.yaml')
+k8s_yaml('k8s/manifests/httproute-poc-nats.yaml')
 
 # Deploy OpenTelemetry Operator
 helm_remote('opentelemetry-operator',
@@ -78,7 +80,6 @@ helm_remote('opentelemetry-operator',
     set=[
         'manager.collectorImage.repository=otel/opentelemetry-collector-k8s',
     ],
-    # labels=['infrastructure'],
 )
 
 # Deploy OpenTelemetry Collector
@@ -89,6 +90,28 @@ k8s_yaml('k8s/otel-collector.yaml')
 #     port_forwards=[],
 #     labels=['monitoring']
 # )
+
+# Deploy minio
+namespace_create('minio')
+k8s_yaml(
+    secret_from_dict(
+        name='minio-creds',
+        namespace='minio',
+        inputs={
+          'rootUser': os.getenv('MINIO_ROOT_USER'),
+          'rootPassword': os.getenv('MINIO_ROOT_PASSWORD'),
+        },
+    )
+)
+
+helm_remote('minio',
+    repo_url='https://charts.min.io/',
+    namespace='minio',
+    values=[
+        'k8s/values/minio.yaml',
+    ]
+)
+k8s_yaml('k8s/manifests/httproute-minio.yaml')
 
 # Deploy Prometheus
 helm_remote('kube-prometheus-stack',
@@ -140,34 +163,34 @@ k8s_resource(
     labels=['infrastructure','nats'],
 )
 
-# Build NATS agent container using Nix and push to registry
-custom_build(
-    'reg.wheat-dn42.net/poc-nats-agent',
-    'nix build .#nats-agent-container && ./result | gzip --fast | skopeo copy docker-archive:/dev/stdin docker://reg.wheat-dn42.net/poc-nats-agent:latest && nix build .#producer',
-    deps=['src', 'Cargo.toml', 'Cargo.lock', 'flake.nix'],
-    tag='latest',
-    skips_local_docker=True,
-)
+# # Build NATS agent container using Nix and push to registry
+# custom_build(
+#     'reg.wheat-dn42.net/poc-nats-agent',
+#     'nix build .#nats-agent-container && ./result | gzip --fast | skopeo copy docker-archive:/dev/stdin docker://reg.wheat-dn42.net/poc-nats-agent:latest && nix build .#producer',
+#     deps=['src', 'Cargo.toml', 'Cargo.lock', 'flake.nix'],
+#     tag='latest',
+#     skips_local_docker=True,
+# )
 
-# Deploy NATS agent using Helm
-helm_resource(
-    name='nats-agent-helm',
-    chart='./k8s/nats-agent',
-    namespace='default',
-    release_name='poc-nats-agent',
-    image_deps=[('reg.wheat-dn42.net/poc-nats-agent')],
-    image_keys=[('image.registry', 'image.repository', 'image.tag')],
-    resource_deps=['nats'],
-    port_forwards='8080:8080',
-    labels=['nats-agent'],
-    flags=[
-        '--set', 'nats.url=nats://nats.nats-io.svc.cluster.local:4222',
-        '--set', 'nats.streamName=events',
-        '--set', 'nats.subjects=events.>',
-        '--set', 'nats.consumerName=nats-agent',
-        '--set', 'nats.batchSize=10',
-        '--set', 'opentelemetry.enabled=true',
-        '--set', 'opentelemetry.serviceName=nats-agent',
-        '--set', 'opentelemetry.endpoint=http://otel-collector-collector.otel-system.svc.cluster.local:4317',
-    ]
-)
+# # Deploy NATS agent using Helm
+# helm_resource(
+#     name='nats-agent-helm',
+#     chart='./k8s/nats-agent',
+#     namespace='default',
+#     release_name='poc-nats-agent',
+#     image_deps=[('reg.wheat-dn42.net/poc-nats-agent')],
+#     image_keys=[('image.registry', 'image.repository', 'image.tag')],
+#     resource_deps=['nats'],
+#     port_forwards='8080:8080',
+#     labels=['nats-agent'],
+#     flags=[
+#         '--set', 'nats.url=nats://nats.nats-io.svc.cluster.local:4222',
+#         '--set', 'nats.streamName=events',
+#         '--set', 'nats.subjects=events.>',
+#         '--set', 'nats.consumerName=nats-agent',
+#         '--set', 'nats.batchSize=10',
+#         '--set', 'opentelemetry.enabled=true',
+#         '--set', 'opentelemetry.serviceName=nats-agent',
+#         '--set', 'opentelemetry.endpoint=http://otel-collector-collector.otel-system.svc.cluster.local:4317',
+#     ]
+# )

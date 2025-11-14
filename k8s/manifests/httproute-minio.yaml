@@ -1,0 +1,35 @@
+---
+# HTTPRoute maps and ingress to a backend Service
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: minio-console
+  namespace: minio
+spec:
+  hostnames:
+    - "minio-console.poc.wheat-dn42.net"
+  parentRefs:
+    - name: ingress
+      namespace: kgateway-system
+  rules:
+    - backendRefs:
+        - name: minio-console
+          port: 9001
+
+---
+# HTTPRoute maps and ingress to a backend Service
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: minio
+  namespace: minio
+spec:
+  hostnames:
+    - "minio.poc.wheat-dn42.net"
+  parentRefs:
+    - name: ingress
+      namespace: kgateway-system
+  rules:
+    - backendRefs:
+        - name: minio
+          port: 9000

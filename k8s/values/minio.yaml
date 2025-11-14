@@ -1,0 +1,28 @@
+mode: standalone
+resources:
+  requests:
+    memory: 512Mi
+replicas: 1
+persistence:
+  enabled: true
+  size: 1Gi
+existingSecret: minio-creds
+
+# TODO - setup gatewayapi
+users:
+  - accessKey: console
+    secretKey: console123
+    policy: consoleAdmin
+  # Or you can refer to specific secret
+  #- accessKey: externalSecret
+  #  existingSecret: my-secret
+  #  existingSecretKey: password
+  #  policy: readonly
+
+
+buckets: 
+  - name: events
+    policy: none
+    versioning: false
+    objectlocking: false
+
