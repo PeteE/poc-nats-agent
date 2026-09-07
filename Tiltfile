@@ -113,29 +113,6 @@ helm_remote('opentelemetry-operator',
 k8s_yaml('k8s/otel-collector.yaml')
 ##################
 
-################### Blob Storage - Minio
-namespace_create('minio')
-k8s_yaml(
-    secret_from_dict(
-        name='minio-creds',
-        namespace='minio',
-        inputs={
-          'rootUser': os.getenv('MINIO_ROOT_USER'),
-          'rootPassword': os.getenv('MINIO_ROOT_PASSWORD'),
-        },
-    )
-)
-
-helm_remote('minio',
-    repo_url='https://charts.min.io/',
-    namespace='minio',
-    values=[
-        'k8s/values/minio.yaml',
-    ]
-)
-k8s_yaml('k8s/manifests/httproute-minio.yaml')
-###################
-
 ################### NATS Server
 helm_remote('nats',
     repo_url='https://nats-io.github.io/k8s/helm/charts/',

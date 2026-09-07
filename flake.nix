@@ -62,7 +62,6 @@
             kubectl
             k9s
             skopeo
-            minio-client
 
             # dev tooling
             tilt
