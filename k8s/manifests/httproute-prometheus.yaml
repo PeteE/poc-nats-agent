@@ -1,0 +1,33 @@
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  hostnames:
+    - "prometheus.poc.wheat-dn42.net"
+  parentRefs:
+    - name: ingress
+      namespace: kgateway-system
+  rules:
+    - backendRefs:
+        - name: kube-prometheus-stack-prometheus
+          port: 9090
+
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  hostnames:
+    - "grafana.poc.wheat-dn42.net"
+  parentRefs:
+    - name: ingress
+      namespace: kgateway-system
+  rules:
+    - backendRefs:
+        - name: kube-prometheus-stack-prometheus
+          port: 9090
