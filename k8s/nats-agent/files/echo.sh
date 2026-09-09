@@ -43,5 +43,13 @@ else
     echo "$EVENT"
 fi
 
+# Simulate work: sleep a random 0-999ms so the duration histogram gets a
+# spread of values instead of a spike at ~15ms. $RANDOM is a bash builtin
+# (0-32767); %1000 keeps this strictly under one second. Padding to three
+# digits matters -- "0.7" would be 700ms, not 7ms.
+DELAY_MS=$(( RANDOM % 1000 ))
+printf 'Simulating %sms of work\n' "$DELAY_MS"
+sleep "0.$(printf '%03d' "$DELAY_MS")"
+
 echo "Successfully processed event"
 exit 0
