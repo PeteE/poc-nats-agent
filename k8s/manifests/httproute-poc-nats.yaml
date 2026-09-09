@@ -1,0 +1,17 @@
+---
+# HTTPRoute maps and ingress to a backend Service
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: poc-nats-agent-https
+  namespace: default
+spec:
+  hostnames:
+    - "nats-agent.poc.wheat-dn42.net"
+  parentRefs:
+    - name: ingress
+      namespace: kgateway-system
+  rules:
+    - backendRefs:
+        - name: poc-nats-agent
+          port: 8080

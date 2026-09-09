@@ -1,0 +1,7 @@
+---
+stores:
+  yaml:
+    indent: 2
+creation_rules:
+  - path_regex: 'secrets\.yaml$'
+    azure_keyvault: https://kv-corp-sd8j.vault.azure.net/keys/sops-kv-corp-sd8j/cce212d968b94aeaa5b5752acfd6885a

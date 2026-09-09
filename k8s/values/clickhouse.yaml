@@ -1,0 +1,8 @@
+clickhouse:
+  defaultUser:
+    password_secret_name: "clickhouse-creds"
+
+  allowExternalAccess: true
+  persistence:
+    size: 2Gi
+

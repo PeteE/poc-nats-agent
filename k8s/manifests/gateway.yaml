@@ -1,0 +1,21 @@
+---
+# Gatway is our entrypoint from the outside world
+kind: Gateway
+apiVersion: gateway.networking.k8s.io/v1
+metadata:
+  name: ingress
+  namespace: kgateway-system
+spec:
+  gatewayClassName: kgateway
+  listeners:
+    - protocol: HTTPS
+      port: 443
+      name: https
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: wildcard-poc-wheat-dn42-net
+            kind: Secret
+      allowedRoutes:
+        namespaces:
+          from: All

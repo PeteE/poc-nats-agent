@@ -1,0 +1,11 @@
+{{- if .Values.handlerScript.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nats-agent.fullname" . }}-handler
+  labels:
+    {{- include "nats-agent.labels" . | nindent 4 }}
+data:
+  handler.sh: |
+{{ .Files.Get (printf "files/%s" .Values.handlerScript.filename) | indent 4 }}
+{{- end }}

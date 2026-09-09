@@ -1,0 +1,18 @@
+txtOwnerId: poc-nats-agent
+provider: cloudflare
+interval: 10m
+logLevel: info
+logFormat: json
+policy: upsert-only
+sources:
+  - gateway-httproute
+
+extraArgs:
+  - "--cloudflare-dns-records-per-page=1000"
+  - "--domain-filter=wheat-dn42.net"
+env:
+  - name: CF_API_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: cloudflare-api-token
+        key: api-token

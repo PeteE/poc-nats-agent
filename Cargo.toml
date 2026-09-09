@@ -1,0 +1,40 @@
+[package]
+name = "nats-agent"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "nats-agent"
+path = "src/main.rs"
+
+[[bin]]
+name = "producer"
+path = "src/bin/producer.rs"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive", "env"] }
+uuid = { version = "1.11", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+async-nats = "0.37"
+tokio = { version = "1.42", features = ["full"] }
+futures = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+once_cell = "1.19"
+axum = "0.7"
+sysinfo = "0.32"
+tower-http = { version = "0.6", features = ["trace"] }
+humantime = "2.1"
+
+# Tracing and OpenTelemetry
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+opentelemetry = { version = "0.27", features = ["metrics"] }
+# spec_unstable_metrics_views gates new_view/Instrument/Stream, which
+# src/telemetry.rs needs to override the default histogram bucket
+# boundaries (the SDK defaults are sized for milliseconds; we record
+# seconds).
+opentelemetry_sdk = { version = "0.27", features = ["rt-tokio", "spec_unstable_metrics_views"] }
+opentelemetry-otlp = { version = "0.27", features = ["default"] }
+futures-util = "0.3.31"
